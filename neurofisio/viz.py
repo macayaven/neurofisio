@@ -123,7 +123,6 @@ def plot_eeg_segment(
         "artf": "#78909c",
     }
     if annotations:
-        -scale * 0.5
         ymax = (n_ch - 1) * scale + scale * 0.5
         for ann in annotations:
             a_start = ann.get("start", 0)

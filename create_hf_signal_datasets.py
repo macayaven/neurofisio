@@ -147,8 +147,6 @@ def read_edf_signals(edf_path):
         sample_rates = [f.getSampleFrequency(i) for i in range(n_signals)]
         duration = f.file_duration
 
-        build_electrode_map(labels)
-
         sr_counts = defaultdict(int)
         for sr in sample_rates:
             sr_counts[int(sr)] += 1
