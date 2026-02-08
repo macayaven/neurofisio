@@ -1,0 +1,71 @@
+[project]
+name = "neurofisio"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "ipykernel>=7.2.0",
+    "ipywidgets>=8.1.8",
+    "jupyterlab>=4.5.3",
+    "matplotlib>=3.10.8",
+    "mne>=1.11.0",
+    "mne-qt-browser>=0.7.4",
+    "numpy>=2.4.2",
+    "openpyxl>=3.1.5",
+    "pandas>=2.0.0",
+    "poethepoet>=0.40.0",
+    "pyedflib>=0.1.42",
+    "pyqt6>=6.10.2",
+    "scipy>=1.17.0",
+    "streamlit>=1.40.0",
+    "tqdm>=4.67.3",
+]
+
+[tool.setuptools.packages.find]
+include = ["neurofisio*"]
+
+[tool.poe.tasks.app-up]
+help = "Start the EEG Explorer Streamlit app (background)"
+shell = """
+cd app
+nohup streamlit run eeg_explorer.py --server.port ${port} > streamlit.log 2>&1 &
+PID=$!
+echo $PID > .streamlit.pid
+sleep 3
+if kill -0 $PID 2>/dev/null; then
+  echo "EEG Explorer running on http://0.0.0.0:${port} (PID $PID)"
+else
+  echo "Failed to start — check app/streamlit.log" >&2
+  exit 1
+fi
+"""
+  [tool.poe.tasks.app-up.args.port]
+  default = "8501"
+  positional = true
+  required = false
+
+[tool.poe.tasks.app-down]
+help = "Stop the EEG Explorer Streamlit app"
+shell = """
+PID_FILE=app/.streamlit.pid
+if [ -f "$PID_FILE" ]; then
+  PID=$(cat "$PID_FILE")
+  if kill -0 "$PID" 2>/dev/null; then
+    kill "$PID"
+    echo "Stopped EEG Explorer (PID $PID)"
+  else
+    echo "Process $PID already stopped"
+  fi
+  rm -f "$PID_FILE"
+else
+  # Fallback: kill any streamlit run eeg_explorer
+  PIDS=$(pgrep -f 'streamlit run eeg_explorer' || true)
+  if [ -n "$PIDS" ]; then
+    echo "$PIDS" | xargs kill
+    echo "Stopped streamlit processes: $PIDS"
+  else
+    echo "No running EEG Explorer found"
+  fi
+fi
+"""
