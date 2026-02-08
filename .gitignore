@@ -41,5 +41,6 @@ app/streamlit.log
 # Claude Code
 .claude/
 
-# uv lock (large, regenerated from pyproject.toml)
-uv.lock
+
+# Ruff
+.ruff_cache/

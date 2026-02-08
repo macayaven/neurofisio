@@ -22,20 +22,18 @@ Usage:
 import argparse
 import gc
 import json
-import os
 import re
 import shutil
-import sys
 import traceback
-from pathlib import Path
 from collections import defaultdict
+from math import gcd
+from pathlib import Path
 
 import numpy as np
 import pyedflib
-from scipy.signal import resample_poly
-from math import gcd
 from datasets import Dataset
 from huggingface_hub import HfApi
+from scipy.signal import resample_poly
 from tqdm import tqdm
 
 # ─── Configuration ───────────────────────────────────────────────────────────
@@ -43,9 +41,9 @@ from tqdm import tqdm
 DATA_ROOT = Path("/home/carlos/workspace/neurofisio/data/tuh_eeg")
 HF_ORG = "macayaven"
 HF_PREFIX = "tuh-eeg"
-TARGET_SR = 250        # Target sample rate (Hz)
-WINDOW_SEC = 10        # Window duration in seconds
-N_CHANNELS = 22        # TCP bipolar montage channels
+TARGET_SR = 250  # Target sample rate (Hz)
+WINDOW_SEC = 10  # Window duration in seconds
+N_CHANNELS = 22  # TCP bipolar montage channels
 WINDOW_SAMPLES = TARGET_SR * WINDOW_SEC  # 2500
 
 # Chunked upload: write a parquet shard every SHARD_MAX_ROWS rows
@@ -53,29 +51,59 @@ SHARD_MAX_ROWS = 5000
 
 # TCP bipolar montage: 22 channel pairs
 TCP_PAIRS = [
-    ("FP1", "F7"),  ("F7", "T3"),   ("T3", "T5"),   ("T5", "O1"),   # Left temporal
-    ("FP2", "F8"),  ("F8", "T4"),   ("T4", "T6"),   ("T6", "O2"),   # Right temporal
-    ("A1", "T3"),   ("T3", "C3"),   ("C3", "CZ"),   ("CZ", "C4"),   # Central
-    ("C4", "T4"),   ("T4", "A2"),                                     # Central cont.
-    ("FP1", "F3"),  ("F3", "C3"),   ("C3", "P3"),   ("P3", "O1"),   # Left parasagittal
-    ("FP2", "F4"),  ("F4", "C4"),   ("C4", "P4"),   ("P4", "O2"),   # Right parasagittal
+    ("FP1", "F7"),
+    ("F7", "T3"),
+    ("T3", "T5"),
+    ("T5", "O1"),  # Left temporal
+    ("FP2", "F8"),
+    ("F8", "T4"),
+    ("T4", "T6"),
+    ("T6", "O2"),  # Right temporal
+    ("A1", "T3"),
+    ("T3", "C3"),
+    ("C3", "CZ"),
+    ("CZ", "C4"),  # Central
+    ("C4", "T4"),
+    ("T4", "A2"),  # Central cont.
+    ("FP1", "F3"),
+    ("F3", "C3"),
+    ("C3", "P3"),
+    ("P3", "O1"),  # Left parasagittal
+    ("FP2", "F4"),
+    ("F4", "C4"),
+    ("C4", "P4"),
+    ("P4", "O2"),  # Right parasagittal
 ]
 TCP_CHANNEL_NAMES = [f"{a}-{b}" for a, b in TCP_PAIRS]
 
 # Electrode name aliases (handle naming variations in EDF files)
 ELECTRODE_ALIASES = {
-    "FP1": ["FP1", "Fp1"], "FP2": ["FP2", "Fp2"],
-    "F7": ["F7"], "F3": ["F3"], "FZ": ["FZ", "Fz"],
-    "F4": ["F4"], "F8": ["F8"],
-    "A1": ["A1"], "T3": ["T3", "T7"], "C3": ["C3"],
-    "CZ": ["CZ", "Cz"], "C4": ["C4"], "T4": ["T4", "T8"], "A2": ["A2"],
-    "T5": ["T5", "P7"], "P3": ["P3"], "PZ": ["PZ", "Pz"],
-    "P4": ["P4"], "T6": ["T6", "P8"],
-    "O1": ["O1"], "O2": ["O2"],
+    "FP1": ["FP1", "Fp1"],
+    "FP2": ["FP2", "Fp2"],
+    "F7": ["F7"],
+    "F3": ["F3"],
+    "FZ": ["FZ", "Fz"],
+    "F4": ["F4"],
+    "F8": ["F8"],
+    "A1": ["A1"],
+    "T3": ["T3", "T7"],
+    "C3": ["C3"],
+    "CZ": ["CZ", "Cz"],
+    "C4": ["C4"],
+    "T4": ["T4", "T8"],
+    "A2": ["A2"],
+    "T5": ["T5", "P7"],
+    "P3": ["P3"],
+    "PZ": ["PZ", "Pz"],
+    "P4": ["P4"],
+    "T6": ["T6", "P8"],
+    "O1": ["O1"],
+    "O2": ["O2"],
 }
 
 
 # ─── Signal Processing ──────────────────────────────────────────────────────
+
 
 def parse_channel_label(label):
     """Extract electrode name from EDF channel label."""
@@ -84,7 +112,7 @@ def parse_channel_label(label):
         label = label[4:]
     for suffix in ["-REF", "-LE", "-AVG", "-AR"]:
         if label.endswith(suffix):
-            label = label[:-len(suffix)]
+            label = label[: -len(suffix)]
     return label.strip()
 
 
@@ -118,8 +146,6 @@ def read_edf_signals(edf_path):
         labels = f.getSignalLabels()
         sample_rates = [f.getSampleFrequency(i) for i in range(n_signals)]
         duration = f.file_duration
-
-        emap = build_electrode_map(labels)
 
         sr_counts = defaultdict(int)
         for sr in sample_rates:
@@ -179,59 +205,66 @@ def window_signal(montage, window_sec=WINDOW_SEC, sr=TARGET_SR):
 
 # ─── Annotation Loaders ─────────────────────────────────────────────────────
 
+
 def load_csv_annotations(csv_path):
     rows = []
-    with open(csv_path, "r") as fh:
+    with open(csv_path) as fh:
         for line in fh:
             line = line.strip()
             if line.startswith("#") or not line or "channel" in line.lower():
                 continue
             parts = line.split(",")
             if len(parts) >= 5:
-                rows.append({
-                    "channel": parts[0].strip(),
-                    "start_time": float(parts[1].strip()),
-                    "stop_time": float(parts[2].strip()),
-                    "label": parts[3].strip(),
-                    "confidence": float(parts[4].strip()),
-                })
+                rows.append(
+                    {
+                        "channel": parts[0].strip(),
+                        "start_time": float(parts[1].strip()),
+                        "stop_time": float(parts[2].strip()),
+                        "label": parts[3].strip(),
+                        "confidence": float(parts[4].strip()),
+                    }
+                )
     return rows
 
 
 def load_tse_annotations(tse_path):
     rows = []
-    with open(tse_path, "r") as fh:
+    with open(tse_path) as fh:
         for line in fh:
             line = line.strip()
             if not line or line.startswith("version") or line.startswith("#"):
                 continue
             parts = line.split()
             if len(parts) >= 4:
-                rows.append({
-                    "start_time": float(parts[0]),
-                    "stop_time": float(parts[1]),
-                    "label": parts[2],
-                    "confidence": float(parts[3]),
-                })
+                rows.append(
+                    {
+                        "start_time": float(parts[0]),
+                        "stop_time": float(parts[1]),
+                        "label": parts[2],
+                        "confidence": float(parts[3]),
+                    }
+                )
     return rows
 
 
 def load_rec_annotations(rec_path):
     event_map = {0: "null", 1: "spsw", 2: "gped", 3: "pled", 4: "eyem", 5: "artf", 6: "bckg"}
     rows = []
-    with open(rec_path, "r") as fh:
+    with open(rec_path) as fh:
         for line in fh:
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
             parts = line.split(",")
             if len(parts) >= 4:
-                rows.append({
-                    "channel_idx": int(parts[0]),
-                    "start_time": float(parts[1]),
-                    "stop_time": float(parts[2]),
-                    "label": event_map.get(int(parts[3]), f"unknown_{parts[3]}"),
-                })
+                rows.append(
+                    {
+                        "channel_idx": int(parts[0]),
+                        "start_time": float(parts[1]),
+                        "stop_time": float(parts[2]),
+                        "label": event_map.get(int(parts[3]), f"unknown_{parts[3]}"),
+                    }
+                )
     return rows
 
 
@@ -274,15 +307,16 @@ def get_window_labels_from_rec(annotations, start_sec, end_sec):
 
 # ─── Path Parsing ────────────────────────────────────────────────────────────
 
+
 def parse_subject_id(filepath):
     stem = Path(filepath).stem
-    m = re.search(r'([a-z]{8})_s\d{3}', stem)
+    m = re.search(r"([a-z]{8})_s\d{3}", stem)
     if m:
         return m.group(1)
-    m = re.search(r'^([a-z]{8})_', stem)
+    m = re.search(r"^([a-z]{8})_", stem)
     if m:
         return m.group(1)
-    m = re.search(r'/([a-z]{8})/s\d{3}', str(filepath))
+    m = re.search(r"/([a-z]{8})/s\d{3}", str(filepath))
     if m:
         return m.group(1)
     return ""
@@ -291,13 +325,14 @@ def parse_subject_id(filepath):
 # ─── Generator-Based Corpus Processors ──────────────────────────────────────
 # Each generator yields one row dict at a time (never holds full dataset).
 
+
 def gen_tusl_signals(data_root):
     """TUSL: slowing vs background, per-recording TSE annotations."""
     edf_files = sorted((data_root / "tusl").rglob("*.edf"))
     print(f"  Found {len(edf_files)} EDF files")
     skipped = 0
     for edf_path in tqdm(edf_files, desc="  TUSL"):
-        montage, duration, orig_sr = read_edf_signals(edf_path)
+        montage, _duration, _orig_sr = read_edf_signals(edf_path)
         if montage is None:
             skipped += 1
             continue
@@ -330,7 +365,7 @@ def gen_tuar_signals(data_root):
     print(f"  Found {len(edf_files)} EDF files")
     skipped = 0
     for edf_path in tqdm(edf_files, desc="  TUAR"):
-        montage, duration, orig_sr = read_edf_signals(edf_path)
+        montage, _duration, _orig_sr = read_edf_signals(edf_path)
         if montage is None:
             skipped += 1
             continue
@@ -359,7 +394,7 @@ def gen_tuev_signals(data_root):
     print(f"  Found {len(edf_files)} EDF files")
     skipped = 0
     for edf_path in tqdm(edf_files, desc="  TUEV"):
-        montage, duration, orig_sr = read_edf_signals(edf_path)
+        montage, _duration, _orig_sr = read_edf_signals(edf_path)
         if montage is None:
             skipped += 1
             continue
@@ -390,7 +425,7 @@ def gen_tuep_signals(data_root):
     print(f"  Found {len(edf_files)} EDF files")
     skipped = 0
     for edf_path in tqdm(edf_files, desc="  TUEP"):
-        montage, duration, orig_sr = read_edf_signals(edf_path)
+        montage, _duration, _orig_sr = read_edf_signals(edf_path)
         if montage is None:
             skipped += 1
             continue
@@ -425,12 +460,18 @@ def gen_tuab_signals(data_root):
         return
     skipped = 0
     for edf_path in tqdm(edf_files, desc="  TUAB"):
-        montage, duration, orig_sr = read_edf_signals(edf_path)
+        montage, _duration, _orig_sr = read_edf_signals(edf_path)
         if montage is None:
             skipped += 1
             continue
         path_str = str(edf_path)
-        label = "normal" if "/normal/" in path_str else "abnormal" if "/abnormal/" in path_str else "unknown"
+        label = (
+            "normal"
+            if "/normal/" in path_str
+            else "abnormal"
+            if "/abnormal/" in path_str
+            else "unknown"
+        )
         split = "train" if "/train/" in path_str else "eval" if "/eval/" in path_str else "unknown"
         subject_id = parse_subject_id(edf_path)
         for w_idx, (signal, start_sec, end_sec) in enumerate(window_signal(montage)):
@@ -457,7 +498,7 @@ def gen_tusz_signals(data_root):
         return
     skipped = 0
     for edf_path in tqdm(edf_files, desc="  TUSZ"):
-        montage, duration, orig_sr = read_edf_signals(edf_path)
+        montage, _duration, _orig_sr = read_edf_signals(edf_path)
         if montage is None:
             skipped += 1
             continue
@@ -470,7 +511,11 @@ def gen_tusz_signals(data_root):
         subject_id = parse_subject_id(edf_path)
         for w_idx, (signal, start_sec, end_sec) in enumerate(window_signal(montage)):
             labels = get_window_labels_from_csv(annotations, start_sec, end_sec)
-            bi_labels = get_window_labels_from_csv(bi_annotations, start_sec, end_sec) if bi_annotations else labels
+            bi_labels = (
+                get_window_labels_from_csv(bi_annotations, start_sec, end_sec)
+                if bi_annotations
+                else labels
+            )
             has_seizure = any(l not in ("bckg", "background") for l in bi_labels)
             yield {
                 "signal": signal.tolist(),
@@ -488,6 +533,7 @@ def gen_tusz_signals(data_root):
 
 
 # ─── Chunked Upload ──────────────────────────────────────────────────────────
+
 
 def process_and_upload(generator_fn, corpus_name, data_root, dry_run=False):
     """Process EDF files via generator and upload parquet shards incrementally.
@@ -584,7 +630,15 @@ def generate_signal_card(corpus_name, n_rows, columns):
         f"| `{c}` | {'22x2500 float32 array (TCP bipolar montage, 250Hz)' if c == 'signal' else '-'} |"
         for c in columns
     )
-    size_cat = "n<1K" if n_rows < 1000 else "1K<n<10K" if n_rows < 10000 else "10K<n<100K" if n_rows < 100000 else "100K<n<1M"
+    size_cat = (
+        "n<1K"
+        if n_rows < 1000
+        else "1K<n<10K"
+        if n_rows < 10000
+        else "10K<n<100K"
+        if n_rows < 100000
+        else "100K<n<1M"
+    )
     return f"""---
 license: other
 license_name: tuh-eeg-license
@@ -686,9 +740,9 @@ def main():
             print(f"Unknown corpus: {corpus}")
             continue
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Processing {corpus.upper()} (signal extraction)")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         try:
             process_and_upload(GENERATORS[corpus], corpus, data_root, dry_run=args.dry_run)
@@ -696,7 +750,7 @@ def main():
             print(f"  ERROR processing {corpus}: {e}")
             traceback.print_exc()
 
-    print(f"\nDone!")
+    print("\nDone!")
 
 
 if __name__ == "__main__":
