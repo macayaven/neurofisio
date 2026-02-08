@@ -30,12 +30,20 @@ uv run python create_hf_datasets.py --corpus tusl          # Metadata dataset
 uv run python create_hf_signal_datasets.py --corpus tusl   # Windowed signal dataset
 uv run python create_hf_signal_datasets.py --corpus all    # All corpora
 
+# ── Code quality ───────────────────────────────────────────
+uv run poe check                 # Run all checks (lint + format + test)
+uv run poe lint                  # Ruff linter only
+uv run poe lint-fix              # Ruff linter with auto-fix
+uv run poe format                # Check formatting (CI mode, no changes)
+uv run poe format-fix            # Auto-format code
+uv run poe test                  # Run pytest
+
 # ── Data sync from ISIP ───────────────────────────────────
 rsync -auvxL -e "ssh -i ~/.ssh/vanessa-thonon-vb" \
   nedc-tuh-eeg@www.isip.piconepress.com:data/tuh_eeg/ data/tuh_eeg/
 ```
 
-No test suite exists yet. No linter/formatter is configured.
+
 
 ## Architecture
 

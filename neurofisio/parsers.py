@@ -13,20 +13,20 @@ def parse_tuh_path(filepath):
     or None if the filename doesn't match TUH naming convention.
     """
     p = Path(filepath)
-    match = re.match(r'([a-z]{8})_s(\d+)_t(\d+)', p.stem)
+    match = re.match(r"([a-z]{8})_s(\d+)_t(\d+)", p.stem)
     if not match:
         return None
     montage = None
     for part in p.parts:
-        if part.startswith(('01_', '02_', '03_', '04_')):
+        if part.startswith(("01_", "02_", "03_", "04_")):
             montage = part
             break
     return {
-        'subject_id': match.group(1),
-        'session_num': int(match.group(2)),
-        'token_num': int(match.group(3)),
-        'montage': montage,
-        'path': str(filepath),
+        "subject_id": match.group(1),
+        "session_num": int(match.group(2)),
+        "token_num": int(match.group(3)),
+        "montage": montage,
+        "path": str(filepath),
     }
 
 
@@ -41,10 +41,10 @@ def load_csv_annotations(csv_path):
         header_lines = 0
         with open(csv_path) as f:
             for line in f:
-                if line.startswith('#'):
+                if line.startswith("#"):
                     header_lines += 1
-                    if '=' in line:
-                        key, val = line.strip('# \n').split('=', 1)
+                    if "=" in line:
+                        key, val = line.strip("# \n").split("=", 1)
                         metadata[key.strip()] = val.strip()
                 else:
                     break
@@ -64,16 +64,18 @@ def load_tse_annotations(tse_path):
         with open(tse_path) as f:
             for line in f:
                 line = line.strip()
-                if not line or line.startswith(('#', 'version')):
+                if not line or line.startswith(("#", "version")):
                     continue
                 parts = line.split()
                 if len(parts) >= 3:
-                    events.append({
-                        'start': float(parts[0]),
-                        'stop': float(parts[1]),
-                        'label': parts[2],
-                        'prob': float(parts[3]) if len(parts) > 3 else 1.0,
-                    })
+                    events.append(
+                        {
+                            "start": float(parts[0]),
+                            "stop": float(parts[1]),
+                            "label": parts[2],
+                            "prob": float(parts[3]) if len(parts) > 3 else 1.0,
+                        }
+                    )
     except Exception:
         pass
     return pd.DataFrame(events)
@@ -84,23 +86,25 @@ def load_rec_annotations(rec_path):
 
     Format per line: ``channel,start,stop,label_code``
     """
-    LABEL_MAP = {1: 'spsw', 2: 'gped', 3: 'pled', 4: 'eyem', 5: 'artf', 6: 'bckg'}
+    LABEL_MAP = {1: "spsw", 2: "gped", 3: "pled", 4: "eyem", 5: "artf", 6: "bckg"}
     events = []
     try:
         with open(rec_path) as f:
             for line in f:
                 line = line.strip()
-                if not line or line.startswith('#'):
+                if not line or line.startswith("#"):
                     continue
-                parts = line.split(',')
+                parts = line.split(",")
                 if len(parts) >= 4:
-                    events.append({
-                        'channel': int(parts[0]),
-                        'start': float(parts[1]),
-                        'stop': float(parts[2]),
-                        'label_code': int(parts[3]),
-                        'label': LABEL_MAP.get(int(parts[3]), f'unknown_{parts[3]}'),
-                    })
+                    events.append(
+                        {
+                            "channel": int(parts[0]),
+                            "start": float(parts[1]),
+                            "stop": float(parts[2]),
+                            "label_code": int(parts[3]),
+                            "label": LABEL_MAP.get(int(parts[3]), f"unknown_{parts[3]}"),
+                        }
+                    )
     except Exception:
         pass
     return pd.DataFrame(events)
@@ -117,15 +121,17 @@ def load_lab_annotations(lab_path):
         with open(lab_path) as f:
             for line in f:
                 line = line.strip()
-                if not line or line.startswith('#'):
+                if not line or line.startswith("#"):
                     continue
                 parts = line.split()
                 if len(parts) >= 3:
-                    events.append({
-                        'start_sec': int(parts[0]) / 1e5,
-                        'stop_sec': int(parts[1]) / 1e5,
-                        'label': parts[2],
-                    })
+                    events.append(
+                        {
+                            "start_sec": int(parts[0]) / 1e5,
+                            "stop_sec": int(parts[1]) / 1e5,
+                            "label": parts[2],
+                        }
+                    )
     except Exception:
         pass
     return pd.DataFrame(events)

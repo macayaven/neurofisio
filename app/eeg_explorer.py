@@ -1,6 +1,7 @@
 """NeuroFisio EEG Explorer — Streamlit app for browsing TUH EEG corpora."""
 
 import matplotlib
+
 matplotlib.use("Agg")  # headless backend — must precede any other matplotlib import
 
 import time as _time
@@ -8,7 +9,6 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import mne
-import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -36,7 +36,8 @@ st.set_page_config(
 )
 
 # ── Dark clinical theme via CSS injection ────────────────────────────────────
-st.markdown("""
+st.markdown(
+    """
 <style>
 /* ── Import a distinctive font pair ─────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap');
@@ -305,7 +306,9 @@ div[data-testid="stHorizontalBlock"] button[kind="secondary"]:hover {
     display: none !important;
 }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # ── Constants ────────────────────────────────────────────────────────────────
 DATA_ROOT = Path("/home/carlos/workspace/neurofisio/data/tuh_eeg")
@@ -321,25 +324,61 @@ CORPORA_CONFIG = {
 }
 
 CORPUS_META = {
-    "TUSL": {"desc": "Slowing vs Seizure differentiation", "size": "1.5 GB",
-             "version": "v2.0.1", "labels": "seiz, slow, bckg", "ann_ext": ".tse"},
-    "TUAR": {"desc": "Per-channel artifact detection", "size": "5.4 GB",
-             "version": "v3.0.1", "labels": "eyem, chew, shiv, musc, elec, ...", "ann_ext": ".csv"},
-    "TUEV": {"desc": "6-class EEG event classification", "size": "19 GB",
-             "version": "v2.0.1", "labels": "spsw, gped, pled, eyem, artf, bckg", "ann_ext": ".rec"},
-    "TUEP": {"desc": "Epilepsy / no-epilepsy diagnosis", "size": "35 GB",
-             "version": "v3.0.0", "labels": "epilepsy, no_epilepsy", "ann_ext": ".csv"},
-    "TUAB": {"desc": "Binary normal / abnormal EEG", "size": "58 GB",
-             "version": "v3.0.1", "labels": "normal, abnormal (by folder)", "ann_ext": None},
-    "TUSZ": {"desc": "Seizure detection benchmark", "size": "81 GB",
-             "version": "v2.0.3", "labels": "seiz, bckg (+ seizure types)", "ann_ext": ".csv_bi"},
-    "TUEG": {"desc": "Full TUH EEG Corpus (unlabeled)", "size": "1,639 GB",
-             "version": "v2.0.1", "labels": "N/A", "ann_ext": None},
+    "TUSL": {
+        "desc": "Slowing vs Seizure differentiation",
+        "size": "1.5 GB",
+        "version": "v2.0.1",
+        "labels": "seiz, slow, bckg",
+        "ann_ext": ".tse",
+    },
+    "TUAR": {
+        "desc": "Per-channel artifact detection",
+        "size": "5.4 GB",
+        "version": "v3.0.1",
+        "labels": "eyem, chew, shiv, musc, elec, ...",
+        "ann_ext": ".csv",
+    },
+    "TUEV": {
+        "desc": "6-class EEG event classification",
+        "size": "19 GB",
+        "version": "v2.0.1",
+        "labels": "spsw, gped, pled, eyem, artf, bckg",
+        "ann_ext": ".rec",
+    },
+    "TUEP": {
+        "desc": "Epilepsy / no-epilepsy diagnosis",
+        "size": "35 GB",
+        "version": "v3.0.0",
+        "labels": "epilepsy, no_epilepsy",
+        "ann_ext": ".csv",
+    },
+    "TUAB": {
+        "desc": "Binary normal / abnormal EEG",
+        "size": "58 GB",
+        "version": "v3.0.1",
+        "labels": "normal, abnormal (by folder)",
+        "ann_ext": None,
+    },
+    "TUSZ": {
+        "desc": "Seizure detection benchmark",
+        "size": "81 GB",
+        "version": "v2.0.3",
+        "labels": "seiz, bckg (+ seizure types)",
+        "ann_ext": ".csv_bi",
+    },
+    "TUEG": {
+        "desc": "Full TUH EEG Corpus (unlabeled)",
+        "size": "1,639 GB",
+        "version": "v2.0.1",
+        "labels": "N/A",
+        "ann_ext": None,
+    },
 }
 
 ANN_EXTS = [".csv", ".csv_bi", ".tse", ".tse_agg", ".lbl", ".lbl_agg", ".rec", ".lab"]
 
 # ── Cached helpers ───────────────────────────────────────────────────────────
+
 
 @st.cache_data(ttl=300, show_spinner=False)
 def get_available_corpora() -> list[str]:
@@ -416,19 +455,19 @@ def _load_ann_list(edf_path: str, found_ann: list) -> list[dict]:
             # Normalize column names for the plot overlay
             for _, row in df.iterrows():
                 ev = {}
-                if 'start_time' in df.columns:
-                    ev['start'] = float(row['start_time'])
-                    ev['stop'] = float(row['stop_time'])
-                elif 'start' in df.columns:
-                    ev['start'] = float(row['start'])
-                    ev['stop'] = float(row['stop'])
-                elif 'start_sec' in df.columns:
-                    ev['start'] = float(row['start_sec'])
-                    ev['stop'] = float(row['stop_sec'])
+                if "start_time" in df.columns:
+                    ev["start"] = float(row["start_time"])
+                    ev["stop"] = float(row["stop_time"])
+                elif "start" in df.columns:
+                    ev["start"] = float(row["start"])
+                    ev["stop"] = float(row["stop"])
+                elif "start_sec" in df.columns:
+                    ev["start"] = float(row["start_sec"])
+                    ev["stop"] = float(row["stop_sec"])
                 else:
                     continue
-                ev['label'] = str(row.get('label', ''))
-                if ev['label'] and ev['label'] != 'bckg':
+                ev["label"] = str(row.get("label", ""))
+                if ev["label"] and ev["label"] != "bckg":
                     events.append(ev)
         except Exception:
             pass
@@ -465,7 +504,9 @@ with st.sidebar:
 
     # Show corpus stats inline
     meta = CORPUS_META.get(corpus_name, {})
-    st.caption(f"{meta.get('desc', '')}  ·  {meta.get('size', '?')}  ·  {len(sorted_sids)} subjects")
+    st.caption(
+        f"{meta.get('desc', '')}  ·  {meta.get('size', '?')}  ·  {len(sorted_sids)} subjects"
+    )
 
     subject_id = st.selectbox("SUBJECT", options=sorted_sids)
 
@@ -533,7 +574,9 @@ max_dur = info.get("duration_sec", 60)
 
 # Detect colocated annotations
 edf_p = Path(edf_path)
-found_ann = [(ext, str(edf_p.with_suffix(ext))) for ext in ANN_EXTS if edf_p.with_suffix(ext).exists()]
+found_ann = [
+    (ext, str(edf_p.with_suffix(ext))) for ext in ANN_EXTS if edf_p.with_suffix(ext).exists()
+]
 
 # ── Session-state defaults (reset on file change) ────────────────────────────
 if st.session_state.get("_viewer_path") != edf_path:
@@ -554,11 +597,13 @@ st.markdown("<div class='transport-bar'>", unsafe_allow_html=True)
 
 tc1, tc2, tc3, tc4, tc5, tc6, tc7 = st.columns([1, 1, 1, 1, 1, 6, 3])
 
+
 def _set_pos(pos, stop_play=False):
     """Update time position (scrubber syncs before its next render)."""
     st.session_state["t_pos"] = pos
     if stop_play:
         st.session_state["playing"] = False
+
 
 with tc1:
     if st.button("⏮", key="t_start", help="Jump to start"):
@@ -598,8 +643,12 @@ with tc6:
 
 with tc7:
     speed = st.select_slider(
-        "Speed", options=[0.5, 1.0, 1.5, 2.0, 3.0], value=st.session_state["speed"],
-        format_func=lambda x: f"{x:.1f}x", key="speed_sl", label_visibility="collapsed",
+        "Speed",
+        options=[0.5, 1.0, 1.5, 2.0, 3.0],
+        value=st.session_state["speed"],
+        format_func=lambda x: f"{x:.1f}x",
+        key="speed_sl",
+        label_visibility="collapsed",
     )
     st.session_state["speed"] = speed
 
@@ -608,9 +657,14 @@ scrub_max = max(0.0, max_dur - t_dur)
 # Sync data-model position into widget state *before* the slider renders
 st.session_state["scrubber"] = min(t_pos, scrub_max)
 new_pos = st.slider(
-    "Position", min_value=0.0, max_value=max(0.01, scrub_max),
-    value=min(t_pos, scrub_max), step=max(0.1, t_dur * 0.1),
-    format="%.1fs", key="scrubber", label_visibility="collapsed",
+    "Position",
+    min_value=0.0,
+    max_value=max(0.01, scrub_max),
+    value=min(t_pos, scrub_max),
+    step=max(0.1, t_dur * 0.1),
+    format="%.1fs",
+    key="scrubber",
+    label_visibility="collapsed",
 )
 if abs(new_pos - t_pos) > 0.05:
     st.session_state["t_pos"] = new_pos
@@ -621,17 +675,22 @@ if abs(new_pos - t_pos) > 0.05:
 sc1, sc2, _pad = st.columns([2, 2, 8])
 with sc1:
     new_dur = st.select_slider(
-        "Window", options=[2, 5, 10, 15, 20, 30, 60],
-        value=int(min(t_dur, 60)), format_func=lambda x: f"{x}s",
-        key="dur_sl", label_visibility="collapsed",
+        "Window",
+        options=[2, 5, 10, 15, 20, 30, 60],
+        value=int(min(t_dur, 60)),
+        format_func=lambda x: f"{x}s",
+        key="dur_sl",
+        label_visibility="collapsed",
     )
     if new_dur != int(t_dur):
         st.session_state["t_dur"] = float(min(new_dur, max_dur))
         t_dur = st.session_state["t_dur"]
 with sc2:
     show_annotations = st.checkbox(
-        "Annotations", value=st.session_state["show_ann"],
-        disabled=len(found_ann) == 0, key="ann_cb",
+        "Annotations",
+        value=st.session_state["show_ann"],
+        disabled=len(found_ann) == 0,
+        key="ann_cb",
     )
     st.session_state["show_ann"] = show_annotations
 
@@ -655,9 +714,13 @@ else:
 
     actual_start = min(t_pos, max(0, target.times[-1] - t_dur))
     fig = plot_eeg_segment(
-        target, start_sec=actual_start, duration_sec=t_dur,
+        target,
+        start_sec=actual_start,
+        duration_sec=t_dur,
         title=f"{Path(edf_path).stem} ({tag})",
-        dark=True, colorize=True, annotations=ann_events,
+        dark=True,
+        colorize=True,
+        annotations=ann_events,
     )
     st.pyplot(fig)
     plt.close(fig)
@@ -679,7 +742,9 @@ if st.session_state.get("playing"):
 
 # ── Annotations detail (below plot, collapsed by default) ────────────────────
 if found_ann:
-    with st.expander(f"Annotation Data  ({', '.join(ext for ext, _ in found_ann)})", expanded=False):
+    with st.expander(
+        f"Annotation Data  ({', '.join(ext for ext, _ in found_ann)})", expanded=False
+    ):
         for ext, ann_path in found_ann:
             st.markdown(f"**`{ext}`**")
             try:
@@ -703,8 +768,10 @@ if inv:
     with st.expander("Corpus Inventory", expanded=False):
         ic1, ic2, ic3, ic4 = st.columns(4)
         ic1.metric("EDF Files", inv.get("edf_files", "?"))
-        ann_total = sum(inv.get(k, 0) for k in
-                        ("csv_files", "csv_bi_files", "tse_files", "lab_files", "rec_files"))
+        ann_total = sum(
+            inv.get(k, 0)
+            for k in ("csv_files", "csv_bi_files", "tse_files", "lab_files", "rec_files")
+        )
         ic2.metric("Annotations", ann_total)
         ic3.metric("Subjects", inv.get("subjects", "?"))
         if inv.get("montages"):

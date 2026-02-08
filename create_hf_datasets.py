@@ -14,16 +14,13 @@ Usage:
 
 import argparse
 import json
-import os
 import re
-import sys
-from pathlib import Path
 from collections import defaultdict
+from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import pyedflib
-from datasets import Dataset, DatasetDict, Features, Value, Sequence, ClassLabel
+from datasets import Dataset
 from huggingface_hub import HfApi
 from tqdm import tqdm
 
@@ -45,17 +42,34 @@ CORPUS_MAP = {
 
 # Standard TCP bipolar montage (22 channels)
 TCP_MONTAGE = {
-    0: ("FP1", "F7"),  1: ("F7", "T3"),   2: ("T3", "T5"),   3: ("T5", "O1"),
-    4: ("FP2", "F8"),  5: ("F8", "T4"),   6: ("T4", "T6"),   7: ("T6", "O2"),
-    8: ("A1", "T3"),   9: ("T3", "C3"),  10: ("C3", "CZ"),  11: ("CZ", "C4"),
-    12: ("C4", "T4"), 13: ("T4", "A2"),  14: ("FP1", "F3"), 15: ("F3", "C3"),
-    16: ("C3", "P3"), 17: ("P3", "O1"),  18: ("FP2", "F4"), 19: ("F4", "C4"),
-    20: ("C4", "P4"), 21: ("P4", "O2"),
+    0: ("FP1", "F7"),
+    1: ("F7", "T3"),
+    2: ("T3", "T5"),
+    3: ("T5", "O1"),
+    4: ("FP2", "F8"),
+    5: ("F8", "T4"),
+    6: ("T4", "T6"),
+    7: ("T6", "O2"),
+    8: ("A1", "T3"),
+    9: ("T3", "C3"),
+    10: ("C3", "CZ"),
+    11: ("CZ", "C4"),
+    12: ("C4", "T4"),
+    13: ("T4", "A2"),
+    14: ("FP1", "F3"),
+    15: ("F3", "C3"),
+    16: ("C3", "P3"),
+    17: ("P3", "O1"),
+    18: ("FP2", "F4"),
+    19: ("F4", "C4"),
+    20: ("C4", "P4"),
+    21: ("P4", "O2"),
 }
 TCP_CHANNEL_NAMES = [f"{a}-{b}" for a, b in TCP_MONTAGE.values()]
 
 
 # ─── Utility Functions ───────────────────────────────────────────────────────
+
 
 def parse_tuh_path(filepath):
     """Extract metadata from TUH EEG file path."""
@@ -64,32 +78,32 @@ def parse_tuh_path(filepath):
 
     # Extract subject ID from filename first (most reliable: aaaaaaju_s005_t000.edf)
     stem = Path(path_str).stem
-    m = re.search(r'([a-z]{8})_s\d{3}', stem)
+    m = re.search(r"([a-z]{8})_s\d{3}", stem)
     if m:
         result["subject_id"] = m.group(1)
     else:
         # Try TUEV-style filename (aaaaaasu_00000001.edf)
-        m = re.search(r'^([a-z]{8})_', stem)
+        m = re.search(r"^([a-z]{8})_", stem)
         if m:
             result["subject_id"] = m.group(1)
         else:
             # Fallback: from directory path (standard TUEG layout)
-            m = re.search(r'/([a-z]{8})/s\d{3}', path_str)
+            m = re.search(r"/([a-z]{8})/s\d{3}", path_str)
             if m:
                 result["subject_id"] = m.group(1)
 
     # Extract session info
-    m = re.search(r'/(s\d{3}_\d{4}(?:_\d{2}(?:_\d{2})?)?)/', path_str)
+    m = re.search(r"/(s\d{3}_\d{4}(?:_\d{2}(?:_\d{2})?)?)/", path_str)
     if m:
         result["session"] = m.group(1)
 
     # Extract montage
-    m = re.search(r'/(0[1-4]_tcp_(?:ar|le)(?:_a)?)/', path_str)
+    m = re.search(r"/(0[1-4]_tcp_(?:ar|le)(?:_a)?)/", path_str)
     if m:
         result["montage"] = m.group(1)
 
     # Extract token from filename
-    m = re.search(r'_t(\d{3})', Path(path_str).stem)
+    m = re.search(r"_t(\d{3})", Path(path_str).stem)
     if m:
         result["token"] = f"t{m.group(1)}"
 
@@ -118,7 +132,7 @@ def load_csv_annotations(csv_path):
     """Load TUH EEG CSV annotations (TUAR, TUEP, TUSZ format)."""
     metadata = {}
     rows = []
-    with open(csv_path, "r") as fh:
+    with open(csv_path) as fh:
         for line in fh:
             line = line.strip()
             if line.startswith("#"):
@@ -129,32 +143,36 @@ def load_csv_annotations(csv_path):
             elif line and "channel" not in line.lower():
                 parts = line.split(",")
                 if len(parts) >= 5:
-                    rows.append({
-                        "channel": parts[0].strip(),
-                        "start_time": float(parts[1].strip()),
-                        "stop_time": float(parts[2].strip()),
-                        "label": parts[3].strip(),
-                        "confidence": float(parts[4].strip()),
-                    })
+                    rows.append(
+                        {
+                            "channel": parts[0].strip(),
+                            "start_time": float(parts[1].strip()),
+                            "stop_time": float(parts[2].strip()),
+                            "label": parts[3].strip(),
+                            "confidence": float(parts[4].strip()),
+                        }
+                    )
     return metadata, rows
 
 
 def load_tse_annotations(tse_path):
     """Load TSE annotations (TUSL format)."""
     rows = []
-    with open(tse_path, "r") as fh:
+    with open(tse_path) as fh:
         for line in fh:
             line = line.strip()
             if not line or line.startswith("version") or line.startswith("#"):
                 continue
             parts = line.split()
             if len(parts) >= 4:
-                rows.append({
-                    "start_time": float(parts[0]),
-                    "stop_time": float(parts[1]),
-                    "label": parts[2],
-                    "confidence": float(parts[3]),
-                })
+                rows.append(
+                    {
+                        "start_time": float(parts[0]),
+                        "stop_time": float(parts[1]),
+                        "label": parts[2],
+                        "confidence": float(parts[3]),
+                    }
+                )
     return rows
 
 
@@ -162,24 +180,27 @@ def load_rec_annotations(rec_path):
     """Load REC annotations (TUEV format)."""
     rows = []
     event_map = {0: "null", 1: "spsw", 2: "gped", 3: "pled", 4: "eyem", 5: "artf", 6: "bckg"}
-    with open(rec_path, "r") as fh:
+    with open(rec_path) as fh:
         for line in fh:
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
             parts = line.split(",")
             if len(parts) >= 4:
-                rows.append({
-                    "channel_idx": int(parts[0]),
-                    "start_time": float(parts[1]),
-                    "stop_time": float(parts[2]),
-                    "label_code": int(parts[3]),
-                    "label": event_map.get(int(parts[3]), f"unknown_{parts[3]}"),
-                })
+                rows.append(
+                    {
+                        "channel_idx": int(parts[0]),
+                        "start_time": float(parts[1]),
+                        "stop_time": float(parts[2]),
+                        "label_code": int(parts[3]),
+                        "label": event_map.get(int(parts[3]), f"unknown_{parts[3]}"),
+                    }
+                )
     return rows
 
 
 # ─── Corpus-Specific Processors ─────────────────────────────────────────────
+
 
 def process_tusl(data_root, include_signals=False):
     """Process TUH Slowing Corpus (TUSL)."""
@@ -196,12 +217,14 @@ def process_tusl(data_root, include_signals=False):
             records.append(meta)
             continue
 
-        meta.update({
-            "n_channels": edf_info["n_channels"],
-            "duration_sec": edf_info["duration_sec"],
-            "sample_rate": int(edf_info["sample_rates"][0]) if edf_info["sample_rates"] else 0,
-            "start_date": edf_info["start_date"],
-        })
+        meta.update(
+            {
+                "n_channels": edf_info["n_channels"],
+                "duration_sec": edf_info["duration_sec"],
+                "sample_rate": int(edf_info["sample_rates"][0]) if edf_info["sample_rates"] else 0,
+                "start_date": edf_info["start_date"],
+            }
+        )
 
         # Load TSE aggregate annotations
         tse_agg = edf_path.with_suffix(".tse_agg")
@@ -245,17 +268,19 @@ def process_tuar(data_root):
             records.append(meta)
             continue
 
-        meta.update({
-            "n_channels": edf_info["n_channels"],
-            "duration_sec": edf_info["duration_sec"],
-            "sample_rate": int(edf_info["sample_rates"][0]) if edf_info["sample_rates"] else 0,
-            "start_date": edf_info["start_date"],
-        })
+        meta.update(
+            {
+                "n_channels": edf_info["n_channels"],
+                "duration_sec": edf_info["duration_sec"],
+                "sample_rate": int(edf_info["sample_rates"][0]) if edf_info["sample_rates"] else 0,
+                "start_date": edf_info["start_date"],
+            }
+        )
 
         # Load CSV annotations
         csv_path = edf_path.with_suffix(".csv")
         if csv_path.exists():
-            csv_meta, ann = load_csv_annotations(csv_path)
+            _csv_meta, ann = load_csv_annotations(csv_path)
             labels = list(set(r["label"] for r in ann))
             channels_with_artifacts = list(set(r["channel"] for r in ann))
             meta["labels"] = labels
@@ -292,12 +317,14 @@ def process_tuev(data_root):
             records.append(meta)
             continue
 
-        meta.update({
-            "n_channels": edf_info["n_channels"],
-            "duration_sec": edf_info["duration_sec"],
-            "sample_rate": int(edf_info["sample_rates"][0]) if edf_info["sample_rates"] else 0,
-            "start_date": edf_info["start_date"],
-        })
+        meta.update(
+            {
+                "n_channels": edf_info["n_channels"],
+                "duration_sec": edf_info["duration_sec"],
+                "sample_rate": int(edf_info["sample_rates"][0]) if edf_info["sample_rates"] else 0,
+                "start_date": edf_info["start_date"],
+            }
+        )
 
         # Determine split from path
         if "/train/" in str(edf_path):
@@ -342,12 +369,14 @@ def process_tuep(data_root):
             records.append(meta)
             continue
 
-        meta.update({
-            "n_channels": edf_info["n_channels"],
-            "duration_sec": edf_info["duration_sec"],
-            "sample_rate": int(edf_info["sample_rates"][0]) if edf_info["sample_rates"] else 0,
-            "start_date": edf_info["start_date"],
-        })
+        meta.update(
+            {
+                "n_channels": edf_info["n_channels"],
+                "duration_sec": edf_info["duration_sec"],
+                "sample_rate": int(edf_info["sample_rates"][0]) if edf_info["sample_rates"] else 0,
+                "start_date": edf_info["start_date"],
+            }
+        )
 
         # Determine epilepsy label from directory
         if "/00_epilepsy/" in str(edf_path):
@@ -360,7 +389,7 @@ def process_tuep(data_root):
         # Load CSV annotations if present
         csv_path = edf_path.with_suffix(".csv")
         if csv_path.exists():
-            csv_meta, ann = load_csv_annotations(csv_path)
+            _csv_meta, ann = load_csv_annotations(csv_path)
             labels = list(set(r["label"] for r in ann))
             meta["labels"] = labels
             meta["n_annotations"] = len(ann)
@@ -394,12 +423,14 @@ def process_tuab(data_root):
             records.append(meta)
             continue
 
-        meta.update({
-            "n_channels": edf_info["n_channels"],
-            "duration_sec": edf_info["duration_sec"],
-            "sample_rate": int(edf_info["sample_rates"][0]) if edf_info["sample_rates"] else 0,
-            "start_date": edf_info["start_date"],
-        })
+        meta.update(
+            {
+                "n_channels": edf_info["n_channels"],
+                "duration_sec": edf_info["duration_sec"],
+                "sample_rate": int(edf_info["sample_rates"][0]) if edf_info["sample_rates"] else 0,
+                "start_date": edf_info["start_date"],
+            }
+        )
 
         # Determine label and split from path
         path_str = str(edf_path)
@@ -441,12 +472,14 @@ def process_tusz(data_root):
             records.append(meta)
             continue
 
-        meta.update({
-            "n_channels": edf_info["n_channels"],
-            "duration_sec": edf_info["duration_sec"],
-            "sample_rate": int(edf_info["sample_rates"][0]) if edf_info["sample_rates"] else 0,
-            "start_date": edf_info["start_date"],
-        })
+        meta.update(
+            {
+                "n_channels": edf_info["n_channels"],
+                "duration_sec": edf_info["duration_sec"],
+                "sample_rate": int(edf_info["sample_rates"][0]) if edf_info["sample_rates"] else 0,
+                "start_date": edf_info["start_date"],
+            }
+        )
 
         # Determine split from path
         path_str = str(edf_path)
@@ -460,7 +493,7 @@ def process_tusz(data_root):
         # Load CSV annotations (multi-class)
         csv_path = edf_path.with_suffix(".csv")
         if csv_path.exists():
-            csv_meta, ann = load_csv_annotations(csv_path)
+            _csv_meta, ann = load_csv_annotations(csv_path)
             labels = list(set(r["label"] for r in ann))
             meta["labels"] = labels
             meta["n_annotations"] = len(ann)
@@ -500,12 +533,14 @@ def process_tueg(data_root):
             records.append(meta)
             continue
 
-        meta.update({
-            "n_channels": edf_info["n_channels"],
-            "duration_sec": edf_info["duration_sec"],
-            "sample_rate": int(edf_info["sample_rates"][0]) if edf_info["sample_rates"] else 0,
-            "start_date": edf_info["start_date"],
-        })
+        meta.update(
+            {
+                "n_channels": edf_info["n_channels"],
+                "duration_sec": edf_info["duration_sec"],
+                "sample_rate": int(edf_info["sample_rates"][0]) if edf_info["sample_rates"] else 0,
+                "start_date": edf_info["start_date"],
+            }
+        )
 
         records.append(meta)
 
@@ -513,6 +548,7 @@ def process_tueg(data_root):
 
 
 # ─── Dataset Upload ──────────────────────────────────────────────────────────
+
 
 def records_to_dataset(records, corpus_name):
     """Convert records to a HuggingFace Dataset, normalizing columns."""
@@ -637,7 +673,7 @@ def upload_to_hf(dataset, corpus_name, version, dry_run=False):
         repo_id=repo_id,
         repo_type="dataset",
     )
-    print(f"  Uploaded dataset card")
+    print("  Uploaded dataset card")
 
 
 # ─── Main ────────────────────────────────────────────────────────────────────
@@ -658,9 +694,15 @@ CORPUS_ORDER = ["tusl", "tuar", "tuev", "tuep", "tuab", "tusz", "tueg"]
 
 def main():
     parser = argparse.ArgumentParser(description="Create HF datasets for TUH EEG corpora")
-    parser.add_argument("--corpus", default="all", help="Corpus to process (tusl/tuar/tuev/tuep/tuab/tusz/tueg/all)")
+    parser.add_argument(
+        "--corpus",
+        default="all",
+        help="Corpus to process (tusl/tuar/tuev/tuep/tuab/tusz/tueg/all)",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Preview without uploading")
-    parser.add_argument("--data-root", default=str(DATA_ROOT), help="Path to tuh_eeg data directory")
+    parser.add_argument(
+        "--data-root", default=str(DATA_ROOT), help="Path to tuh_eeg data directory"
+    )
     args = parser.parse_args()
 
     data_root = Path(args.data_root)
@@ -676,9 +718,9 @@ def main():
             continue
 
         full_name, version = CORPUS_MAP[corpus]
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Processing {corpus.upper()} ({full_name} {version})")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         processor = PROCESSORS[corpus]
         records = processor(data_root)
